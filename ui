@@ -1,0 +1,300 @@
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+local UI = {}
+
+local COLORS = {
+	Background = Color3.fromRGB(12, 14, 20),
+	Panel = Color3.fromRGB(19, 22, 31),
+	Card = Color3.fromRGB(25, 29, 40),
+	CardHover = Color3.fromRGB(32, 37, 51),
+	Accent = Color3.fromRGB(130, 104, 255),
+	AccentSoft = Color3.fromRGB(57, 47, 105),
+	Text = Color3.fromRGB(241, 242, 250),
+	Muted = Color3.fromRGB(144, 150, 169),
+	Line = Color3.fromRGB(43, 48, 63),
+	Green = Color3.fromRGB(86, 220, 164),
+}
+
+local function round(instance, radius)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, radius)
+	corner.Parent = instance
+end
+
+local function stroke(instance, color, transparency)
+	local outline = Instance.new("UIStroke")
+	outline.Color = color
+	outline.Transparency = transparency or 0
+	outline.Thickness = 1
+	outline.Parent = instance
+end
+
+local function label(parent, text, size, color, font)
+	local item = Instance.new("TextLabel")
+	item.BackgroundTransparency = 1
+	item.Text = text
+	item.TextColor3 = color or COLORS.Text
+	item.TextSize = size
+	item.Font = font or Enum.Font.Gotham
+	item.TextXAlignment = Enum.TextXAlignment.Left
+	item.TextYAlignment = Enum.TextYAlignment.Center
+	item.Parent = parent
+	return item
+end
+
+local function makeToggle(parent)
+	local toggle = Instance.new("TextButton")
+	toggle.Name = "Toggle"
+	toggle.Size = UDim2.fromOffset(42, 24)
+	toggle.BackgroundColor3 = Color3.fromRGB(55, 59, 73)
+	toggle.Text = ""
+	toggle.AutoButtonColor = false
+	toggle.Parent = parent
+	round(toggle, 12)
+
+	local dot = Instance.new("Frame")
+	dot.Size = UDim2.fromOffset(18, 18)
+	dot.Position = UDim2.fromOffset(3, 3)
+	dot.BackgroundColor3 = COLORS.Text
+	dot.Parent = toggle
+	round(dot, 9)
+
+	local enabled = false
+	toggle.Activated:Connect(function()
+		enabled = not enabled
+		TweenService:Create(toggle, TweenInfo.new(0.16), {
+			BackgroundColor3 = enabled and COLORS.Accent or Color3.fromRGB(55, 59, 73),
+		}):Play()
+		TweenService:Create(dot, TweenInfo.new(0.16), {
+			Position = enabled and UDim2.fromOffset(21, 3) or UDim2.fromOffset(3, 3),
+		}):Play()
+	end)
+end
+
+local PAGES = {
+	Combat = {
+		{"Aim Assist", "Demo toggle · no gameplay effect"},
+		{"Hitbox Display", "Demo toggle · no gameplay effect"},
+		{"Safe Mode", "Keep experimental options disabled"},
+	},
+	Movement = {
+		{"Sprint", "Demo toggle · no gameplay effect"},
+		{"Jump Boost", "Demo toggle · no gameplay effect"},
+		{"Movement Preview", "Demo toggle · no gameplay effect"},
+	},
+	Visuals = {
+		{"Player Tags", "Demo toggle · no gameplay effect"},
+		{"Highlight Preview", "Demo toggle · no gameplay effect"},
+		{"UI Animations", "Smooth menu transitions"},
+	},
+}
+
+function UI.Start()
+	local player = game:GetService("Players").LocalPlayer
+	local playerGui = player:WaitForChild("PlayerGui")
+
+	local old = playerGui:FindFirstChild("ModMenuUI")
+	if old then old:Destroy() end
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "ModMenuUI"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.Parent = playerGui
+
+	local shell = Instance.new("Frame")
+	shell.Name = "Window"
+	shell.Size = UDim2.fromOffset(760, 490)
+	shell.Position = UDim2.new(0.5, -380, 0.5, -245)
+	shell.BackgroundColor3 = COLORS.Background
+	shell.Parent = gui
+	round(shell, 16)
+	stroke(shell, COLORS.Line, 0.15)
+
+	local scale = Instance.new("UIScale")
+	scale.Scale = 1
+	scale.Parent = shell
+
+	local sidebar = Instance.new("Frame")
+	sidebar.Size = UDim2.new(0, 205, 1, 0)
+	sidebar.BackgroundColor3 = COLORS.Panel
+	sidebar.BorderSizePixel = 0
+	sidebar.Parent = shell
+	round(sidebar, 16)
+
+	local sidebarMask = Instance.new("Frame")
+	sidebarMask.Position = UDim2.new(1, -16, 0, 0)
+	sidebarMask.Size = UDim2.new(0, 16, 1, 0)
+	sidebarMask.BackgroundColor3 = COLORS.Panel
+	sidebarMask.BorderSizePixel = 0
+	sidebarMask.Parent = sidebar
+
+	local brand = label(sidebar, "NOVA", 21, COLORS.Text, Enum.Font.GothamBold)
+	brand.Position = UDim2.fromOffset(22, 23)
+	brand.Size = UDim2.new(1, -44, 0, 28)
+	local sub = label(sidebar, "MODERATION SUITE", 9, COLORS.Muted, Enum.Font.GothamBold)
+	sub.Position = UDim2.fromOffset(23, 51)
+	sub.Size = UDim2.new(1, -44, 0, 17)
+
+	local line = Instance.new("Frame")
+	line.Position = UDim2.fromOffset(20, 82)
+	line.Size = UDim2.new(1, -40, 0, 1)
+	line.BackgroundColor3 = COLORS.Line
+	line.BorderSizePixel = 0
+	line.Parent = sidebar
+
+	local navLabel = label(sidebar, "WORKSPACE", 9, COLORS.Muted, Enum.Font.GothamBold)
+	navLabel.Position = UDim2.fromOffset(23, 100)
+	navLabel.Size = UDim2.new(1, -46, 0, 18)
+
+	local nav = Instance.new("Frame")
+	nav.Position = UDim2.fromOffset(12, 128)
+	nav.Size = UDim2.new(1, -24, 0, 150)
+	nav.BackgroundTransparency = 1
+	nav.Parent = sidebar
+	local navLayout = Instance.new("UIListLayout")
+	navLayout.Padding = UDim.new(0, 7)
+	navLayout.Parent = nav
+
+	local content = Instance.new("Frame")
+	content.Position = UDim2.fromOffset(205, 0)
+	content.Size = UDim2.new(1, -205, 1, 0)
+	content.BackgroundTransparency = 1
+	content.Parent = shell
+
+	local header = Instance.new("Frame")
+	header.Size = UDim2.new(1, 0, 0, 76)
+	header.BackgroundTransparency = 1
+	header.Parent = content
+
+	local pageTitle = label(header, "Combat", 22, COLORS.Text, Enum.Font.GothamBold)
+	pageTitle.Position = UDim2.fromOffset(28, 18)
+	pageTitle.Size = UDim2.new(1, -100, 0, 28)
+	local pageSub = label(header, "Manage your game tools and preferences", 11, COLORS.Muted)
+	pageSub.Position = UDim2.fromOffset(29, 47)
+	pageSub.Size = UDim2.new(1, -50, 0, 18)
+
+	local close = Instance.new("TextButton")
+	close.Size = UDim2.fromOffset(32, 32)
+	close.Position = UDim2.new(1, -48, 0, 22)
+	close.BackgroundColor3 = COLORS.Card
+	close.Text = "×"
+	close.TextColor3 = COLORS.Muted
+	close.TextSize = 21
+	close.Font = Enum.Font.Gotham
+	close.AutoButtonColor = false
+	close.Parent = header
+	round(close, 9)
+	close.Activated:Connect(function() gui.Enabled = false end)
+
+	local body = Instance.new("ScrollingFrame")
+	body.Position = UDim2.fromOffset(28, 89)
+	body.Size = UDim2.new(1, -56, 1, -112)
+	body.BackgroundTransparency = 1
+	body.BorderSizePixel = 0
+	body.ScrollBarThickness = 3
+	body.ScrollBarImageColor3 = COLORS.Accent
+	body.CanvasSize = UDim2.new()
+	body.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	body.Parent = content
+	local bodyLayout = Instance.new("UIListLayout")
+	bodyLayout.Padding = UDim.new(0, 10)
+	bodyLayout.Parent = body
+
+	local buttons = {}
+	local function showPage(pageName)
+		pageTitle.Text = pageName
+		for _, child in ipairs(body:GetChildren()) do
+			if child:IsA("Frame") then child:Destroy() end
+		end
+		for _, data in ipairs(PAGES[pageName]) do
+			local card = Instance.new("Frame")
+			card.Size = UDim2.new(1, -6, 0, 66)
+			card.BackgroundColor3 = COLORS.Card
+			card.BorderSizePixel = 0
+			card.Parent = body
+			round(card, 11)
+			local title = label(card, data[1], 13, COLORS.Text, Enum.Font.GothamSemibold)
+			title.Position = UDim2.fromOffset(15, 11)
+			title.Size = UDim2.new(1, -80, 0, 21)
+			local desc = label(card, data[2], 10, COLORS.Muted)
+			desc.Position = UDim2.fromOffset(15, 34)
+			desc.Size = UDim2.new(1, -80, 0, 17)
+			local toggleHolder = Instance.new("Frame")
+			toggleHolder.Size = UDim2.fromOffset(42, 24)
+			toggleHolder.Position = UDim2.new(1, -58, 0.5, -12)
+			toggleHolder.BackgroundTransparency = 1
+			toggleHolder.Parent = card
+			makeToggle(toggleHolder)
+		end
+	end
+
+	for _, name in ipairs({"Combat", "Movement", "Visuals"}) do
+		local button = Instance.new("TextButton")
+		button.Name = name
+		button.Size = UDim2.new(1, 0, 0, 39)
+		button.BackgroundColor3 = COLORS.Panel
+		button.Text = ""
+		button.AutoButtonColor = false
+		button.Parent = nav
+		round(button, 9)
+		local icon = label(button, ({Combat = "⚔", Movement = "✦", Visuals = "◈"})[name], 15, COLORS.Muted, Enum.Font.GothamBold)
+		icon.Position = UDim2.fromOffset(12, 0)
+		icon.Size = UDim2.fromOffset(22, 39)
+		local textLabel = label(button, name, 12, COLORS.Muted, Enum.Font.GothamSemibold)
+		textLabel.Position = UDim2.fromOffset(42, 0)
+		textLabel.Size = UDim2.new(1, -48, 1, 0)
+		buttons[name] = {button, icon, textLabel}
+		button.Activated:Connect(function()
+			for key, pieces in pairs(buttons) do
+				local active = key == name
+				pieces[1].BackgroundColor3 = active and COLORS.AccentSoft or COLORS.Panel
+				pieces[2].TextColor3 = active and COLORS.Accent or COLORS.Muted
+				pieces[3].TextColor3 = active and COLORS.Text or COLORS.Muted
+			end
+			showPage(name)
+		end)
+	end
+
+	local status = label(sidebar, "●  SYSTEM READY", 9, COLORS.Green, Enum.Font.GothamBold)
+	status.Position = UDim2.new(0, 22, 1, -45)
+	status.Size = UDim2.new(1, -40, 0, 18)
+	local footer = label(sidebar, "NOVA  ·  v1.0", 9, COLORS.Muted)
+	footer.Position = UDim2.new(0, 22, 1, -27)
+	footer.Size = UDim2.new(1, -40, 0, 15)
+
+	local dragging, dragInput, dragStart, startPosition
+	header.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPosition = shell.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	header.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and input == dragInput then
+			local delta = input.Position - dragStart
+			shell.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+		end
+	end)
+
+	showPage("Combat")
+	buttons.Combat[1].BackgroundColor3 = COLORS.AccentSoft
+	buttons.Combat[2].TextColor3 = COLORS.Accent
+	buttons.Combat[3].TextColor3 = COLORS.Text
+
+	local toggleKey = Enum.KeyCode.RightShift
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if not processed and input.KeyCode == toggleKey then gui.Enabled = not gui.Enabled end
+	end)
+end
+
+return UI
