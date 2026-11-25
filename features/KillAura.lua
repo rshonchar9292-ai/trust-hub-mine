@@ -1,213 +1,156 @@
 --!strict
--- features/KillAura.lua
--- Модуль Kill Aura для NOVA Mod Menu
+-- features/MinecraftKillAura.lua
+-- Спеціально для PvP-ігор (MC PVP, Bedwars і т.д.)
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser") -- Для емуляції кліків миші
 
 local KillAura = {}
 
 -- ============ НАЛАШТУВАННЯ ============
 local CONFIG = {
-    Radius = 20,          -- радіус ураження (studs)
-    Damage = 25,          -- шкода за один удар
-    Cooldown = 0.35,      -- інтервал між ударами (сек)
-    MaxParts = 30,        -- ліміт частин для перевірки
-    TeamCheck = false,    -- true = не бити союзників по команді
-    WallCheck = false,    -- true = не бити крізь стіни (повільніше)
-    ShowIndicator = true, -- показувати індикатор радіусу
+    Enabled = false,
+    Radius = 15,                -- Радіус атаки (studs)
+    CPS = 12,                   -- Кліків на секунду (не ставте більше 15-20, буде бан)
+    AutoAim = true,             -- Чи повертати камеру на ціль
+    TeamCheck = false,          -- true = не бити союзників
+    RequireTool = true,         -- Бити лише якщо в руках інструмент (меч)
 }
 -- =====================================
 
-local enabled = false
-local lastAttack = 0
-local heartbeatConn = nil
-local indicator = nil
-
 local localPlayer = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
+local lastClick = 0
+local currentTarget = nil
+local heartbeatConn = nil
 
--- ---------- Допоміжні функції ----------
+local mouse = localPlayer:GetMouse()
 
-local function getCharacter()
-    local char = localPlayer.Character
-    if not char then return nil end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum or hum.Health <= 0 then return nil end
-    return char, hrp, hum
-end
+-- ---------- Допоміжні ----------
 
 local function isAlly(player)
     if not CONFIG.TeamCheck then return false end
-    return player.Team == localPlayer.Team and player.Team ~= nil
+    return player.Team ~= nil and player.Team == localPlayer.Team
 end
 
-local function hasLineOfSight(origin, targetPart)
-    if not CONFIG.WallCheck then return true end
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = { localPlayer.Character }
-    local result = Workspace:Raycast(origin, targetPart.Position - origin, params)
-    return result == nil or result.Instance:IsDescendantOf(targetPart.Parent)
+local function getEquippedTool()
+    local char = localPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChildOfClass("Tool")
 end
 
-local function createIndicator()
-    if not CONFIG.ShowIndicator then return end
-    if indicator then indicator:Destroy() end
+local function pickTarget()
+    local char = localPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
 
-    local part = Instance.new("Part")
-    part.Name = "KillAuraIndicator"
-    part.Shape = Enum.PartType.Ball
-    part.Size = Vector3.new(CONFIG.Radius * 2, CONFIG.Radius * 2, CONFIG.Radius * 2)
-    part.Anchored = true
-    part.CanCollide = false
-    part.CanQuery = false
-    part.CanTouch = false
-    part.Material = Enum.Material.ForceField
-    part.Color = Color3.fromRGB(130, 104, 255)
-    part.Transparency = 0.85
-    part.Parent = Workspace
+    local closest, closestDist = nil, math.huge
 
-    indicator = part
-end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == localPlayer then continue end
+        local pChar = player.Character
+        if not pChar then continue end
 
-local function updateIndicator(hrp)
-    if indicator and hrp then
-        indicator.Position = hrp.Position
-    end
-end
+        local pRoot = pChar:FindFirstChild("HumanoidRootPart")
+        local pHum = pChar:FindFirstChildOfClass("Humanoid")
+        if not pRoot or not pHum or pHum.Health <= 0 then continue end
+        if isAlly(player) then continue end
 
-local function destroyIndicator()
-    if indicator then
-        indicator:Destroy()
-        indicator = nil
-    end
-end
-
--- ---------- Основна логіка удару ----------
-
-local function performAttack()
-    local char, hrp, hum = getCharacter()
-    if not char then return end
-
-    local params = OverlapParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = { char }
-    params.MaxParts = CONFIG.MaxParts
-
-    local parts = Workspace:GetPartBoundsInRadius(hrp.Position, CONFIG.Radius, params)
-    local hitAny = false
-
-    for _, part in ipairs(parts) do
-        local model = part.Parent
-        if not model then continue end
-
-        local targetHum = model:FindFirstChildOfClass("Humanoid")
-        if not targetHum or targetHum.Health <= 0 then continue end
-
-        local targetPlayer = Players:GetPlayerFromCharacter(model)
-        if not targetPlayer or targetPlayer == localPlayer then continue end
-        if isAlly(targetPlayer) then continue end
-
-        if CONFIG.WallCheck then
-            local targetRoot = model:FindFirstChild("HumanoidRootPart")
-            if not targetRoot or not hasLineOfSight(hrp.Position, targetRoot) then
-                continue
-            end
+        local dist = (pRoot.Position - hrp.Position).Magnitude
+        if dist <= CONFIG.Radius and dist < closestDist then
+            closestDist = dist
+            closest = { player = player, character = pChar, root = pRoot }
         end
+    end
 
-        -- Завдаємо шкоди
-        targetHum:TakeDamage(CONFIG.Damage)
-        hitAny = true
+    return closest
+end
 
-        -- Візуальний ефект на цілі
-        local targetRoot = model:FindFirstChild("HumanoidRootPart")
-        if targetRoot then
-            local highlight = Instance.new("Highlight")
-            highlight.FillColor = Color3.fromRGB(255, 80, 80)
-            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-            highlight.FillTransparency = 0.4
-            highlight.Parent = model
-            task.delay(0.15, function()
-                if highlight then highlight:Destroy() end
+-- ---------- Основна логіка ----------
+
+local function onHeartbeat()
+    if not CONFIG.Enabled then return end
+
+    local char = localPlayer.Character
+    if not char then return end
+    
+    local tool = getEquippedTool()
+    if CONFIG.RequireTool and not tool then
+        return -- Чекаємо, поки візьмемо меч у руки
+    end
+
+    -- Оновлюємо ціль
+    if not currentTarget or not currentTarget.root.Parent or currentTarget.root.Parent:FindFirstChildOfClass("Humanoid").Health <= 0 then
+        currentTarget = pickTarget()
+    end
+
+    if not currentTarget then return end
+
+    local targetRoot = currentTarget.root
+
+    -- 1. Поворот камери (Aimbot)
+    if CONFIG.AutoAim and camera then
+        camera.CFrame = CFrame.new(camera.CFrame.Position, targetRoot.Position)
+    end
+
+    -- 2. Спам кліками
+    local now = tick()
+    local clickDelay = 1 / CONFIG.CPS
+
+    if now - lastClick >= clickDelay then
+        lastClick = now
+
+        if tool then
+            -- Спосіб 1: Активація інструменту (меча)
+            pcall(function()
+                tool:Activate()
+            end)
+        else
+            -- Спосіб 2: Емуляція кліку миші (якщо інструмент не потрібен)
+            pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton1(Vector2.new(mouse.X, mouse.Y))
             end)
         end
-    end
-
-    if hitAny then
-        lastAttack = tick()
     end
 end
 
 -- ---------- Публічне API ----------
 
 function KillAura.Start()
-    if enabled then return end
-    enabled = true
-    lastAttack = 0
+    if CONFIG.Enabled then return end
+    CONFIG.Enabled = true
+    lastClick = 0
 
-    createIndicator()
-
-    heartbeatConn = RunService.Heartbeat:Connect(function()
-        if not enabled then return end
-
-        local _, hrp = getCharacter()
-        if not hrp then return end
-
-        updateIndicator(hrp)
-
-        local now = tick()
-        if now - lastAttack < CONFIG.Cooldown then return end
-
-        performAttack()
-    end)
-
-    print("[KillAura] Увімкнено")
+    heartbeatConn = RunService.Heartbeat:Connect(onHeartbeat)
+    print("[KillAura] Увімкнено (PvP Mode)")
 end
 
 function KillAura.Stop()
-    if not enabled then return end
-    enabled = false
+    if not CONFIG.Enabled then return end
+    CONFIG.Enabled = false
 
     if heartbeatConn then
         heartbeatConn:Disconnect()
         heartbeatConn = nil
     end
-
-    destroyIndicator()
+    currentTarget = nil
     print("[KillAura] Вимкнено")
 end
 
 function KillAura.Toggle()
-    if enabled then
-        KillAura.Stop()
-    else
-        KillAura.Start()
-    end
-    return enabled
-end
-
-function KillAura.IsEnabled()
-    return enabled
+    if CONFIG.Enabled then KillAura.Stop() else KillAura.Start() end
+    return CONFIG.Enabled
 end
 
 function KillAura.SetConfig(key, value)
-    if CONFIG[key] == nil then
-        warn(("[KillAura] Невідомий параметр: %s"):format(tostring(key)))
-        return false
+    if CONFIG[key] ~= nil then
+        CONFIG[key] = value
+        return true
     end
-    CONFIG[key] = value
-    if key == "Radius" and enabled then
-        createIndicator()
-    end
-    return true
-end
-
-function KillAura.GetConfig()
-    local copy = {}
-    for k, v in pairs(CONFIG) do copy[k] = v end
-    return copy
+    return false
 end
 
 return KillAura
