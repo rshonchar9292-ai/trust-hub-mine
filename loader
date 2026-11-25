@@ -1,25 +1,20 @@
+-- ModuleScript: ReplicatedStorage/ModMenu/loader
+-- Call Loader.Start() once from a LocalScript in StarterPlayerScripts.
 local Loader = {}
-
-local modulesFolder = script.Parent
+local started = false
 
 function Loader.Start()
-	for _, module in ipairs(modulesFolder:GetChildren()) do
-		if module:IsA("ModuleScript") and module ~= script then
-			local success, result = pcall(require, module)
+	if started then return end
+	started = true
 
-			if not success then
-				warn(("[ModMenu] Не вдалося завантажити %s: %s")
-					:format(module.Name, tostring(result)))
-			elseif type(result) == "table" and type(result.Start) == "function" then
-				local started, startError = pcall(result.Start)
+	local root = script.Parent
+	local UI = require(root:WaitForChild("ui"))
+	local featureFolder = root:WaitForChild("features")
+	local ESP = require(featureFolder:WaitForChild("esp"))
 
-				if not started then
-					warn(("[ModMenu] Помилка запуску %s: %s")
-						:format(module.Name, tostring(startError)))
-				end
-			end
-		end
-	end
+	UI.Start({
+		TargetESP = ESP,
+	})
 end
 
 return Loader
