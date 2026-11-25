@@ -1,0 +1,25 @@
+local Loader = {}
+
+local modulesFolder = script.Parent
+
+function Loader.Start()
+	for _, module in ipairs(modulesFolder:GetChildren()) do
+		if module:IsA("ModuleScript") and module ~= script then
+			local success, result = pcall(require, module)
+
+			if not success then
+				warn(("[ModMenu] Не вдалося завантажити %s: %s")
+					:format(module.Name, tostring(result)))
+			elseif type(result) == "table" and type(result.Start) == "function" then
+				local started, startError = pcall(result.Start)
+
+				if not started then
+					warn(("[ModMenu] Помилка запуску %s: %s")
+						:format(module.Name, tostring(startError)))
+				end
+			end
+		end
+	end
+end
+
+return Loader
