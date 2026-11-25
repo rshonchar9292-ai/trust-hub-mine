@@ -1,0 +1,145 @@
+-- ModuleScript: ReplicatedStorage/ModMenu/features/esp
+-- Visual-only marker. The game chooses the target with SetTarget(model).
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local ESP = {}
+local player = Players.LocalPlayer
+local target
+local enabled = false
+local gui
+local connection
+local healthConnection
+local rotation = 0
+
+local function cleanup()
+	if connection then connection:Disconnect(); connection = nil end
+	if healthConnection then healthConnection:Disconnect(); healthConnection = nil end
+	if gui then gui:Destroy(); gui = nil end
+end
+
+local function adorneeFor(model)
+	if not model or not model:IsA("Model") then return nil end
+	return model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+end
+
+local function render()
+	cleanup()
+	if not enabled or not target then return end
+	local adornee = adorneeFor(target)
+	if not adornee then return end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "TargetMarker"
+	billboard.Adornee = adornee
+	billboard.Size = UDim2.fromOffset(210, 116)
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, 3.4, 0)
+	billboard.AlwaysOnTop = false
+	billboard.LightInfluence = 0
+	billboard.Parent = player:WaitForChild("PlayerGui")
+	gui = billboard
+
+	local card = Instance.new("Frame")
+	card.Size = UDim2.fromOffset(190, 52)
+	card.Position = UDim2.new(0.5, -95, 0, 0)
+	card.BackgroundColor3 = Color3.fromRGB(19, 17, 29)
+	card.BackgroundTransparency = 0.08
+	card.BorderSizePixel = 0
+	card.Parent = billboard
+	Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
+	local outline = Instance.new("UIStroke", card)
+	outline.Color = Color3.fromRGB(133, 98, 255)
+	outline.Transparency = 0.15
+
+	local name = Instance.new("TextLabel")
+	name.BackgroundTransparency = 1
+	name.Position = UDim2.fromOffset(12, 5)
+	name.Size = UDim2.new(1, -24, 0, 20)
+	name.Font = Enum.Font.GothamBold
+	name.TextSize = 13
+	name.TextColor3 = Color3.fromRGB(245, 243, 255)
+	name.TextXAlignment = Enum.TextXAlignment.Left
+	name.TextTruncate = Enum.TextTruncate.AtEnd
+	name.Text = target.Name
+	name.Parent = card
+
+	local humanoid = target:FindFirstChildOfClass("Humanoid")
+	local hp = Instance.new("TextLabel")
+	hp.BackgroundTransparency = 1
+	hp.Position = UDim2.fromOffset(12, 26)
+	hp.Size = UDim2.new(1, -24, 0, 16)
+	hp.Font = Enum.Font.Gotham
+	hp.TextSize = 10
+	hp.TextColor3 = Color3.fromRGB(190, 184, 213)
+	hp.TextXAlignment = Enum.TextXAlignment.Left
+	hp.Parent = card
+
+	local back = Instance.new("Frame")
+	back.Position = UDim2.fromOffset(12, 46)
+	back.Size = UDim2.new(1, -24, 0, 3)
+	back.BackgroundColor3 = Color3.fromRGB(54, 48, 68)
+	back.BorderSizePixel = 0
+	back.Parent = card
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.fromScale(1, 1)
+	fill.BackgroundColor3 = Color3.fromRGB(100, 230, 155)
+	fill.BorderSizePixel = 0
+	fill.Parent = back
+
+	local arrow = Instance.new("TextLabel")
+	arrow.Name = "OrbitArrow"
+	arrow.BackgroundTransparency = 1
+	arrow.AnchorPoint = Vector2.new(0.5, 0.5)
+	arrow.Position = UDim2.new(0.5, 0, 0, 91)
+	arrow.Size = UDim2.fromOffset(54, 54)
+	arrow.Font = Enum.Font.GothamBlack
+	arrow.Text = "➤"
+	arrow.TextSize = 38
+	arrow.TextColor3 = Color3.fromRGB(105, 255, 55)
+	arrow.TextStrokeColor3 = Color3.fromRGB(27, 80, 20)
+	arrow.TextStrokeTransparency = 0.15
+	arrow.Parent = billboard
+
+	local function updateHealth()
+		if not humanoid or humanoid.MaxHealth <= 0 then
+			hp.Text = "TARGET"
+			fill.Size = UDim2.fromScale(0, 1)
+			return
+		end
+		local ratio = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+		hp.Text = ("HP  %d / %d"):format(math.ceil(humanoid.Health), math.ceil(humanoid.MaxHealth))
+		fill.Size = UDim2.fromScale(ratio, 1)
+		fill.BackgroundColor3 = Color3.fromRGB(240, 85, 105):Lerp(Color3.fromRGB(100, 230, 155), ratio)
+	end
+	updateHealth()
+	if humanoid then healthConnection = humanoid.HealthChanged:Connect(updateHealth) end
+
+	connection = RunService.RenderStepped:Connect(function(dt)
+		if not target or not target.Parent or not adorneeFor(target) then
+			ESP.SetTarget(nil)
+			return
+		end
+		rotation = (rotation + dt * 150) % 360
+		arrow.Rotation = rotation
+	end)
+end
+
+function ESP.SetEnabled(value)
+	enabled = value == true
+	render()
+end
+
+function ESP.SetTarget(model)
+	if model ~= nil and not (typeof(model) == "Instance" and model:IsA("Model")) then
+		warn("[TargetESP] SetTarget expects a Model or nil")
+		return
+	end
+	target = model
+	render()
+end
+
+function ESP.ClearTarget()
+	ESP.SetTarget(nil)
+end
+
+return ESP
